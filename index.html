@@ -1,0 +1,213 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#08090d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Black Pearl">
+<title>Black Pearl</title>
+<style>
+:root{color-scheme:dark;--bg:#08090d;--panel:#171923;--accent:#d5ac69;--muted:#999ba8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:white;font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif}
+main{max-width:540px;margin:auto;padding:24px 18px 110px}
+header{display:flex;align-items:center;justify-content:space-between}
+h1{font-size:23px;letter-spacing:2px;color:var(--accent)}
+small,.muted{color:var(--muted)}
+.cover{width:78%;aspect-ratio:1;margin:32px auto 24px;border-radius:24px;background:radial-gradient(circle at 35% 25%,#464052,#191821 55%,#08090d);box-shadow:0 20px 65px #000;display:grid;place-items:center;font-size:85px;color:var(--accent);overflow:hidden}
+.cover img{width:100%;height:100%;object-fit:cover}
+.center{text-align:center}
+#title{font-size:23px;font-weight:700;overflow-wrap:anywhere}
+#artist{color:var(--muted);margin-top:8px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.times{display:flex;justify-content:space-between;color:var(--muted);font-size:12px}
+.controls{display:flex;justify-content:center;align-items:center;gap:25px;margin:20px 0}
+button{border:0;background:none;color:white;font-size:24px;cursor:pointer}
+.play{width:72px;height:72px;border-radius:50%;background:var(--accent);color:#111;font-size:30px}
+.actions{display:flex;gap:12px;margin:22px 0}
+.action{flex:1;background:var(--panel);padding:15px 8px;border-radius:13px;font-size:14px}
+section{background:var(--panel);border-radius:18px;padding:18px;margin:18px 0}
+h2{font-size:17px;margin:0 0 18px}
+.eq{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:5px;align-items:end}
+.band{min-width:0;text-align:center}
+.band input{writing-mode:vertical-lr;direction:rtl;appearance:slider-vertical;width:100%;height:135px}
+.band span{font-size:9px;color:var(--muted)}
+#playlist{list-style:none;padding:0;margin:0}
+#playlist li{padding:13px 5px;border-bottom:1px solid #30313b;cursor:pointer;overflow-wrap:anywhere}
+#playlist li.active{color:var(--accent)}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>BLACK PEARL</h1>
+<small>HI-FI PLAYER</small>
+</header>
+
+<div class="cover" id="cover">◆</div>
+<div class="center">
+<div id="title">Музыка не выбрана</div>
+<div id="artist">Добавьте аудиофайлы</div>
+</div>
+
+<div style="margin-top:28px">
+<input id="seek" type="range" min="0" max="100" value="0">
+<div class="times"><span id="current">0:00</span><span id="duration">0:00</span></div>
+</div>
+
+<div class="controls">
+<button id="prev" aria-label="Предыдущий">⏮</button>
+<button class="play" id="play" aria-label="Воспроизведение">▶</button>
+<button id="next" aria-label="Следующий">⏭</button>
+</div>
+
+<div class="actions">
+<button class="action" id="add">＋ Добавить музыку</button>
+<button class="action" id="shuffle">⇄ Перемешать</button>
+</div>
+<input id="files" type="file" accept="audio/*,.mp3,.m4a,.wav,.flac,.aac,.ogg" multiple hidden>
+
+<section>
+<h2>Громкость</h2>
+<input id="volume" type="range" min="0" max="100" value="85">
+</section>
+
+<section>
+<h2>Эквалайзер · 10 полос</h2>
+<div class="eq" id="eq"></div>
+<div class="actions">
+<button class="action" id="rock">ROCK / METAL</button>
+<button class="action" id="flat">Сброс EQ</button>
+</div>
+</section>
+
+<section>
+<h2>Моя музыка</h2>
+<ul id="playlist"><li class="muted">Список пока пуст</li></ul>
+</section>
+<footer>BLACK PEARL AUDIO • VERSION 1.0</footer>
+</main>
+
+<audio id="audio" preload="metadata"></audio>
+
+<script>
+const audio=document.getElementById('audio');
+const ctx=new (window.AudioContext||window.webkitAudioContext)();
+const source=ctx.createMediaElementSource(audio);
+const frequencies=[32,64,125,250,500,1000,2000,4000,8000,16000];
+const filters=frequencies.map(f=>{
+ const node=ctx.createBiquadFilter();
+ node.type='peaking';
+ node.frequency.value=f;
+ node.Q.value=1;
+ node.gain.value=0;
+ return node;
+});
+let last=source;
+filters.forEach(f=>{last.connect(f);last=f});
+last.connect(ctx.destination);
+
+const $=id=>document.getElementById(id);
+let tracks=[],index=-1,shuffle=false;
+const fmt=t=>{
+ if(!Number.isFinite(t))return '0:00';
+ return Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0');
+};
+const eq=$('eq');
+filters.forEach((f,i)=>{
+ const div=document.createElement('div');
+ div.className='band';
+ const slider=document.createElement('input');
+ slider.type='range';
+ slider.min=-12;slider.max=12;slider.step=.5;slider.value=0;
+ slider.setAttribute('aria-label',frequencies[i]+' Hz');
+ slider.addEventListener('input',()=>f.gain.value=Number(slider.value));
+ const label=document.createElement('span');
+ label.textContent=frequencies[i]>=1000?frequencies[i]/1000+'k':frequencies[i];
+ div.append(slider,label);eq.append(div);
+});
+function preset(values){
+ [...eq.querySelectorAll('input')].forEach((s,i)=>{
+  s.value=values[i];filters[i].gain.value=values[i];
+ });
+}
+$('rock').onclick=()=>preset([3,3,2,0,-1,0,1.5,2,1,0]);
+$('flat').onclick=()=>preset(Array(10).fill(0));
+$('add').onclick=()=>$('files').click();
+$('files').onchange=e=>{
+ const list=[...e.target.files].filter(f=>f.type.startsWith('audio/')||/\.(mp3|m4a|wav|flac|aac|ogg)$/i.test(f.name));
+ if(!list.length){alert('Выберите аудиофайлы');return}
+ const start=tracks.length;
+ list.forEach(f=>tracks.push({name:f.name.replace(/\.[^.]+$/,''),url:URL.createObjectURL(f)}));
+ render();
+ if(index<0)load(start);
+ e.target.value='';
+};
+function render(){
+ $('playlist').innerHTML='';
+ tracks.forEach((t,i)=>{
+  const li=document.createElement('li');
+  li.textContent=(i+1)+'. '+t.name;
+  if(i===index)li.className='active';
+  li.onclick=()=>{load(i);play()};
+  $('playlist').append(li);
+ });
+}
+function load(i){
+ if(!tracks.length)return;
+ index=(i+tracks.length)%tracks.length;
+ audio.src=tracks[index].url;
+ $('title').textContent=tracks[index].name;
+ $('artist').textContent='Локальный аудиофайл';
+ $('seek').value=0;
+ render();
+}
+async function play(){
+ if(index<0){$('files').click();return}
+ try{
+  await ctx.resume();
+  await audio.play();
+ }catch(e){alert('Не удалось воспроизвести файл: '+e.message)}
+}
+$('play').onclick=()=>audio.paused?play():audio.pause();
+audio.onplay=()=>$('play').textContent='❚❚';
+audio.onpause=()=>$('play').textContent='▶';
+function next(step){
+ if(!tracks.length)return;
+ const n=shuffle?Math.floor(Math.random()*tracks.length):(index+step+tracks.length)%tracks.length;
+ load(n);play();
+}
+$('next').onclick=()=>next(1);
+$('prev').onclick=()=>{
+ if(audio.currentTime>3){audio.currentTime=0;return}
+ next(-1);
+};
+audio.onended=()=>next(1);
+audio.ontimeupdate=()=>{
+ $('current').textContent=fmt(audio.currentTime);
+ if(Number.isFinite(audio.duration)&&audio.duration>0)
+ $('seek').value=audio.currentTime/audio.duration*100;
+};
+audio.onloadedmetadata=()=>$('duration').textContent=fmt(audio.duration);
+$('seek').oninput=e=>{
+ if(Number.isFinite(audio.duration))
+ audio.currentTime=audio.duration*Number(e.target.value)/100;
+};
+$('volume').oninput=e=>audio.volume=Number(e.target.value)/100;
+audio.volume=.85;
+$('shuffle').onclick=()=>{
+ shuffle=!shuffle;
+ $('shuffle').style.color=shuffle?'#d5ac69':'white';
+};
+if('mediaSession' in navigator){
+ navigator.mediaSession.setActionHandler('play',play);
+ navigator.mediaSession.setActionHandler('pause',()=>audio.pause());
+ navigator.mediaSession.setActionHandler('nexttrack',()=>next(1));
+ navigator.mediaSession.setActionHandler('previoustrack',()=>next(-1));
+}
+</script>
+</body>
+</html>
